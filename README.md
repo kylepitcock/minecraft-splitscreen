@@ -6,6 +6,9 @@ process, up to four players, each with their own view, HUD, inventory screens an
 - Minecraft **26.1.2**, **NeoForge** 26.1.2.x, Java 25, client-side only
 - The 1.21.1 version lives on the `master` branch
 - **Requires [Legacy4J](https://modrinth.com/mod/legacy4j)** (1.9+, which in turn needs Factory API)
+- Minecraft **1.21.1**, **NeoForge** 21.1.x, client-side only
+- A Minecraft 26.1.2 port lives on the `mc-26.1.2` branch
+- **Requires [Legacy4J](https://modrinth.com/mod/legacy4j)** (1.8+, which in turn needs Factory API)
 
 > **Status: experimental.** Joining, rendering up to four views, per-player inventories and pause menus
 > are verified in a real client with scripted test players. Real controller input has not yet been
