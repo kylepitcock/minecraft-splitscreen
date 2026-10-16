@@ -6,5 +6,6 @@
   "splitscreen.no_pad": "No free controller found. Connect one and press Start, or use /splitscreen join dummy.",
   "key.splitscreen.add_test_player": "Add Test Player (no controller)",
   "key.splitscreen.remove_test_player": "Remove Last Player",
-  "key.category.splitscreen.main": "Splitscreen"
+  "key.category.splitscreen.main": "Splitscreen",
+  "splitscreen.press_start": "Press START to join game"
 }

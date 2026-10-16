@@ -7,14 +7,10 @@ process, up to four players, each with their own view, HUD, inventory screens an
 - The 1.21.1 version lives on the `master` branch
 - **Requires [Legacy4J](https://modrinth.com/mod/legacy4j)** (1.9+, which in turn needs Factory API)
 
-> **Status: experimental.** Joining, rendering up to four views, per-player inventories and pause menus
-> are verified in a real client with scripted test players. Real controller input has not yet been
-> play-tested. Expect rough edges and please report them.
-
 ## Usage
 
 1. Open a **singleplayer** world (the integrated server is what extra players join).
-2. Plug in a controller and press **Start** on it. It joins as the next player.
+2. Plug in a controller and press any button on it. A **Press START to join game** prompt appears; press **Start** to join as the next player.
    - or run `/splitscreen join` (uses the next free controller).
    - **No controller?** Press **F9** (rebindable) or run `/splitscreen join dummy` to add a scripted
      test player that walks, looks around, jumps and swings by itself. **F10** removes the last player.
