@@ -10,3 +10,4 @@ run-data/
 
 hs_err_pid*.log
 repo/
+run-autotest/

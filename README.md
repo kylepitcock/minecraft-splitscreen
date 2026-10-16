@@ -4,6 +4,7 @@ Console-style local splitscreen for Minecraft, inside a **single game instance**
 process, up to four players, each with their own view, HUD, inventory screens and controller.
 
 - Minecraft **1.21.1**, **NeoForge** 21.1.x, client-side only
+- A Minecraft 26.1.2 port lives on the `mc-26.1.2` branch
 - **Requires [Legacy4J](https://modrinth.com/mod/legacy4j)** (1.8+, which in turn needs Factory API)
 
 > **Status: experimental.** The mod loads and all of its mixins apply in a real client, but the
@@ -55,7 +56,8 @@ Legacy4J drives the main player from one selected controller. This mod asks Lega
 that is (via reflection, since its class names change between releases) and never offers it to a secondary
 player. Every other controller is free to join. Legacy4J styles the HUD through Factory API
 "UI definitions" stored on each `Gui`, so this mod copies the main player's definitions onto every extra player's
-`Gui`. Each view keeps at least 640x360 GUI units, which is the size Legacy4J's screens are laid out for.
+`Gui`. Each view is scaled so it keeps at least `minGuiWidth` x `minGuiHeight` GUI units (default 400x225);
+raise those for a smaller, roomier UI or lower them for a bigger one.
 
 If Legacy4J uses its SDL controller backend, its controller index is assumed to match the GLFW joystick
 index. If that is wrong for your setup, use `/splitscreen join` after unplugging the extra controllers
@@ -90,7 +92,7 @@ Mixins live in `org.kylepitcock.splitscreen.mixin.client`; the logic is in `...s
 ## Config
 
 `config/splitscreen-client.toml`: `maxPlayers`, `verticalSplit`, `joinWithStart`, `lookSpeed`,
-`deadzone`, `invertLookY`.
+`deadzone`, `invertLookY`, `minGuiWidth`, `minGuiHeight`.
 
 ## Testing without controllers
 

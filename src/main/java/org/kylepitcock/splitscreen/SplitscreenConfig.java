@@ -29,6 +29,14 @@ public final class SplitscreenConfig {
             .comment("Invert the look axis for secondary players.")
             .define("invertLookY", false);
 
+    public static final ModConfigSpec.IntValue MIN_GUI_WIDTH = BUILDER
+            .comment("Smallest GUI width, in GUI units, a split view may be scaled down to. Lower = bigger UI.")
+            .defineInRange("minGuiWidth", 400, 200, 1000);
+
+    public static final ModConfigSpec.IntValue MIN_GUI_HEIGHT = BUILDER
+            .comment("Smallest GUI height, in GUI units, a split view may be scaled down to. Lower = bigger UI.")
+            .defineInRange("minGuiHeight", 225, 120, 600);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private SplitscreenConfig() {}
