@@ -2,6 +2,7 @@ package org.kylepitcock.splitscreen.mixin.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
+import net.minecraft.client.input.MouseButtonInfo;
 import org.kylepitcock.splitscreen.client.SplitscreenManager;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,8 +19,8 @@ public abstract class MouseHandlerMixin {
     @Final
     private Minecraft minecraft;
 
-    @Invoker("onPress")
-    abstract void splitscreen$callOnPress(long window, int button, int action, int mods);
+    @Invoker("onButton")
+    abstract void splitscreen$callOnButton(long window, MouseButtonInfo info, int action);
 
     @Invoker("onScroll")
     abstract void splitscreen$callOnScroll(long window, double x, double y);
@@ -29,11 +30,11 @@ public abstract class MouseHandlerMixin {
 
     // GLFW mouse callbacks arrive with no player scoped. Re-run them as the main player so the click
     // is interpreted against the main player's viewport size and GUI scale.
-    @Inject(method = "onPress", at = @At("HEAD"), cancellable = true)
-    private void splitscreen$press(long window, int button, int action, int mods, CallbackInfo ci) {
+    @Inject(method = "onButton", at = @At("HEAD"), cancellable = true)
+    private void splitscreen$press(long window, MouseButtonInfo info, int action, CallbackInfo ci) {
         if (SplitscreenManager.shouldScopeMainInput()) {
             ci.cancel();
-            SplitscreenManager.runMain(() -> splitscreen$callOnPress(window, button, action, mods));
+            SplitscreenManager.runMain(() -> splitscreen$callOnButton(window, info, action));
         }
     }
 
@@ -68,6 +69,17 @@ public abstract class MouseHandlerMixin {
             var w = minecraft.getWindow();
             cir.setReturnValue(SplitscreenManager.virtualCursorY() * w.getScreenHeight() / (double) w.getGuiScaledHeight());
         }
+    }
+
+    // 26.1 computes GUI-space mouse coordinates through these two helpers.
+    @Inject(method = "getScaledXPos(Lcom/mojang/blaze3d/platform/Window;)D", at = @At("HEAD"), cancellable = true)
+    private void splitscreen$scaledX(com.mojang.blaze3d.platform.Window window, CallbackInfoReturnable<Double> cir) {
+        if (SplitscreenManager.inSecondaryScope()) cir.setReturnValue(SplitscreenManager.virtualCursorX());
+    }
+
+    @Inject(method = "getScaledYPos(Lcom/mojang/blaze3d/platform/Window;)D", at = @At("HEAD"), cancellable = true)
+    private void splitscreen$scaledY(com.mojang.blaze3d.platform.Window window, CallbackInfoReturnable<Double> cir) {
+        if (SplitscreenManager.inSecondaryScope()) cir.setReturnValue(SplitscreenManager.virtualCursorY());
     }
 
     @Inject(method = "isMouseGrabbed", at = @At("HEAD"), cancellable = true)

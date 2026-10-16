@@ -3,7 +3,6 @@ package org.kylepitcock.splitscreen.mixin.client;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.GameRenderer;
 import org.kylepitcock.splitscreen.client.SplitscreenManager;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,13 +21,45 @@ public abstract class MinecraftMixin {
         if (t != null) cir.setReturnValue(t);
     }
 
-    @Redirect(method = "runTick",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"))
-    private void splitscreen$render(GameRenderer renderer, DeltaTracker tracker, boolean renderLevel) {
+    // The frame is update -> pick -> extract -> render. With several players on screen each phase runs once per
+    // player (with that player's state swapped in) and the render phase then composes all views into the window.
+    @Redirect(method = "renderFrame",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;update(Lnet/minecraft/client/DeltaTracker;Z)V"))
+    private void splitscreen$update(GameRenderer renderer, DeltaTracker tracker, boolean advance) {
         if (SplitscreenManager.shouldSplitRender()) {
-            SplitscreenManager.renderAll((Minecraft) (Object) this, tracker, renderLevel);
+            SplitscreenManager.updateAll((Minecraft) (Object) this, tracker, advance);
         } else {
-            renderer.render(tracker, renderLevel);
+            renderer.update(tracker, advance);
+        }
+    }
+
+    @Redirect(method = "renderFrame",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;pick(F)V"))
+    private void splitscreen$pick(Minecraft mc, float partial) {
+        if (SplitscreenManager.shouldSplitRender()) {
+            SplitscreenManager.pickAll(mc, partial);
+        } else {
+            ((MinecraftAccessor) mc).splitscreen$pick(partial);
+        }
+    }
+
+    @Redirect(method = "renderFrame",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;extract(Lnet/minecraft/client/DeltaTracker;Z)V"))
+    private void splitscreen$extract(GameRenderer renderer, DeltaTracker tracker, boolean advance) {
+        if (SplitscreenManager.shouldSplitRender()) {
+            SplitscreenManager.extractAll((Minecraft) (Object) this, tracker, advance);
+        } else {
+            renderer.extract(tracker, advance);
+        }
+    }
+
+    @Redirect(method = "renderFrame",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"))
+    private void splitscreen$render(GameRenderer renderer, DeltaTracker tracker, boolean advance) {
+        if (SplitscreenManager.shouldSplitRender()) {
+            SplitscreenManager.renderAll((Minecraft) (Object) this, tracker, advance);
+        } else {
+            renderer.render(tracker, advance);
         }
     }
 
@@ -37,19 +68,8 @@ public abstract class MinecraftMixin {
         SplitscreenManager.tickSecondaries((Minecraft) (Object) this);
     }
 
-    @Inject(method = "resizeDisplay", at = @At("TAIL"))
+    @Inject(method = "resizeGui", at = @At("TAIL"))
     private void splitscreen$resized(CallbackInfo ci) {
         SplitscreenManager.onWindowResized();
-    }
-
-    /** Skip the nested "forced tick" (which renders and swaps buffers) while a secondary player loads. */
-    @Inject(method = "updateScreenAndTick", at = @At("HEAD"), cancellable = true)
-    private void splitscreen$noForcedTick(Screen screen, CallbackInfo ci) {
-        if (SplitscreenManager.inSecondaryScope()) {
-            Minecraft mc = (Minecraft) (Object) this;
-            mc.cameraEntity = null;
-            mc.setScreen(screen);
-            ci.cancel();
-        }
     }
 }

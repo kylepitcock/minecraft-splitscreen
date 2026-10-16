@@ -46,20 +46,6 @@ public final class Legacy4JCompat {
         }
     }
 
-    /** Diagnostics: what Legacy4J's HUD math sees right now. */
-    public static void debugHud(String who) {
-        try {
-            Class<?> util = Class.forName("wily.legacy.util.ScreenUtil");
-            Object scale = util.getMethod("getHUDScale").invoke(null);
-            Object dist = util.getMethod("getHUDDistance").invoke(null);
-            Object opacity = util.getMethod("getHUDOpacity").invoke(null);
-            Splitscreen.LOGGER.info("[hud] {} hudScale={} hudDistance={} opacity={} gui={}", who, scale, dist, opacity,
-                    System.identityHashCode(net.minecraft.client.Minecraft.getInstance().gui));
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            Splitscreen.LOGGER.info("[hud] unavailable: {}", e.toString());
-        }
-    }
-
     private static void resolve() throws ReflectiveOperationException {
         if (resolved) return;
         Class<?> client = Class.forName("wily.legacy.Legacy4JClient");

@@ -1,23 +1,19 @@
 package org.kylepitcock.splitscreen.client;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import org.kylepitcock.splitscreen.Splitscreen;
 import org.kylepitcock.splitscreen.SplitscreenConfig;
-import org.kylepitcock.splitscreen.mixin.client.GameRendererAccessor;
 import org.kylepitcock.splitscreen.mixin.client.KeyMappingAccessor;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
+import org.kylepitcock.splitscreen.mixin.client.MinecraftAccessor;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -45,8 +41,7 @@ public final class SplitscreenManager {
     private static int layoutW;
     private static int layoutH;
     private static long lastFrameNanos;
-    private static final boolean DEBUG_SCALE = Boolean.getBoolean("splitscreen.debugScale");
-    private static int debugFrames;
+    private static float frameSeconds;
 
     private SplitscreenManager() {}
 
@@ -115,22 +110,6 @@ public final class SplitscreenManager {
         if (loaded != null) loaded.store(mc);
         ctx.load(mc);
         loaded = ctx;
-        if (!ctx.isPrimary()) shareShaders(ctx);
-    }
-
-    /**
-     * Shaders live in instance fields of the main GameRenderer and are only (re)loaded there, but
-     * blits and post-processing look them up through whichever GameRenderer is current.
-     */
-    private static void shareShaders(PlayerContext ctx) {
-        if (primary == null || primary.gameRenderer == null || ctx.gameRenderer == null) return;
-        ctx.gameRenderer.blitShader = primary.gameRenderer.blitShader;
-        var mine = ((GameRendererAccessor) ctx.gameRenderer).splitscreen$getShaders();
-        var theirs = ((GameRendererAccessor) primary.gameRenderer).splitscreen$getShaders();
-        if (mine.size() != theirs.size() || !mine.equals(theirs)) {
-            mine.clear();
-            mine.putAll(theirs);
-        }
     }
 
     /** Run something as the given player: their state in Minecraft's fields and their viewport as the window. */
@@ -245,7 +224,7 @@ public final class SplitscreenManager {
             relayout(mc, true);
         }
         if (mc.player != null) {
-            mc.player.displayClientMessage(Component.translatable("splitscreen.left", ctx.name()), false);
+            mc.player.sendSystemMessage(Component.translatable("splitscreen.left", ctx.name()));
         }
     }
 
@@ -261,7 +240,7 @@ public final class SplitscreenManager {
         primary = null;
         loaded = null;
         scoped = null;
-        mc.resizeDisplay();
+        mc.resizeGui();
     }
 
     /** Main player left the world: tear everything down without touching the (closing) server. */
@@ -314,52 +293,74 @@ public final class SplitscreenManager {
         return isActive() && scoped == null && loaded == primary;
     }
 
-    /** Replacement for GameRenderer#render when more than one player is on screen. */
-    public static void renderAll(Minecraft mc, DeltaTracker tracker, boolean renderLevel) {
+    /** True if this player's view has something to draw yet. A still-connecting player has no level or player. */
+    private static boolean hasView(PlayerContext ctx) {
+        return ctx.isPrimary() || (ctx.level != null && ctx.player != null);
+    }
+
+    /** Phase 1 of a frame: camera and level renderer updates, once per player. */
+    public static void updateAll(Minecraft mc, DeltaTracker tracker, boolean advance) {
         relayout(mc, false);
-
         long now = Util.getNanos();
-        float seconds = lastFrameNanos == 0 ? 0f : Math.min(0.1f, (now - lastFrameNanos) / 1.0e9f);
+        frameSeconds = lastFrameNanos == 0 ? 0f : Math.min(0.1f, (now - lastFrameNanos) / 1.0e9f);
         lastFrameNanos = now;
-
         for (PlayerContext ctx : List.copyOf(CONTEXTS)) {
             run(ctx, () -> {
-                if (!ctx.isPrimary()) ctx.frameUpdate(mc, seconds);
-                RenderTarget target = ctx.target;
-                target.clear(Minecraft.ON_OSX);
-                target.bindWrite(true);
-                FogRenderer.setupNoFog();
-                RenderSystem.enableCull();
-                if (DEBUG_SCALE && debugFrames++ % 1200 < 4) {
-                    var w = mc.getWindow();
-                    Splitscreen.LOGGER.info("[scale] {} vp={}x{} guiScale={} guiScaled={}x{} win={}x{} screen={}x{}", ctx.name(),
-                            ctx.viewport.width(), ctx.viewport.height(), w.getGuiScale(), w.getGuiScaledWidth(), w.getGuiScaledHeight(),
-                            w.getWidth(), w.getHeight(), w.getScreenWidth(), w.getScreenHeight());
-                    Legacy4JCompat.debugHud(ctx.name());
-                }
-                if (ctx.isPrimary() || (ctx.level != null && ctx.player != null)) {
-                    mc.gameRenderer.render(tracker, renderLevel);
-                } else {
-                    // Still connecting: nothing to draw yet (the toast/overlay code assumes a level).
-                    RenderSystem.clearColor(0.08f, 0.08f, 0.1f, 1f);
-                    RenderSystem.clear(GL11.GL_COLOR_BUFFER_BIT, Minecraft.ON_OSX);
-                    RenderSystem.clearColor(0f, 0f, 0f, 0f);
-                }
+                if (!ctx.isPrimary()) ctx.frameUpdate(mc, frameSeconds);
+                if (!hasView(ctx)) return;
+                if (!ctx.isPrimary() && advance && mc.level != null) mc.level.update();
+                mc.gameRenderer.update(tracker, advance);
             });
         }
+    }
 
-        // Compose every player's target into the real window target.
-        RenderTarget main = mc.getMainRenderTarget();
-        int fullH = main.height;
-        GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, main.frameBufferId);
-        for (PlayerContext ctx : CONTEXTS) {
-            Viewport v = ctx.viewport;
-            GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, ctx.target.frameBufferId);
-            GL30.glBlitFramebuffer(0, 0, v.width(), v.height(),
-                    v.x(), fullH - v.y() - v.height(), v.x() + v.width(), fullH - v.y(),
-                    GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+    /** Phase 2: what each player is looking at. */
+    public static void pickAll(Minecraft mc, float partial) {
+        for (PlayerContext ctx : List.copyOf(CONTEXTS)) {
+            if (!hasView(ctx)) continue;
+            run(ctx, () -> ((MinecraftAccessor) mc).splitscreen$pick(partial));
         }
-        main.bindWrite(true);
+    }
+
+    /** Phase 3: turn each player's world and GUI into render state. */
+    public static void extractAll(Minecraft mc, DeltaTracker tracker, boolean advance) {
+        for (PlayerContext ctx : List.copyOf(CONTEXTS)) {
+            if (!hasView(ctx)) continue;
+            run(ctx, () -> mc.gameRenderer.extract(tracker, advance));
+        }
+    }
+
+    /** Phase 4: draw every player into their own target, then compose the targets into the window. */
+    public static void renderAll(Minecraft mc, DeltaTracker tracker, boolean advance) {
+        var encoder = RenderSystem.getDevice().createCommandEncoder();
+        RenderTarget main = mc.getMainRenderTarget();
+        encoder.clearColorTexture(main.getColorTexture(), 0xFF000000);
+        for (PlayerContext ctx : List.copyOf(CONTEXTS)) {
+            run(ctx, () -> {
+                if (hasView(ctx)) {
+                    mc.gameRenderer.render(tracker, advance);
+                } else {
+                    // Still connecting: nothing to draw yet (the GUI code assumes a level).
+                    encoder.clearColorTexture(ctx.target.getColorTexture(), 0xFF14141A);
+                }
+            });
+            composeInto(encoder, main, ctx);
+        }
+    }
+
+    /** Draw one player's finished target into their rectangle of the window target. */
+    private static void composeInto(com.mojang.blaze3d.systems.CommandEncoder encoder, RenderTarget main, PlayerContext ctx) {
+        Viewport v = ctx.viewport;
+        try (com.mojang.blaze3d.systems.RenderPass pass = encoder.createRenderPass(() -> "splitscreen compose " + ctx.name(),
+                main.getColorTextureView(), java.util.OptionalInt.empty())) {
+            pass.setPipeline(net.minecraft.client.renderer.RenderPipelines.TRACY_BLIT);
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.bindTexture("InSampler", ctx.target.getColorTextureView(),
+                    RenderSystem.getSamplerCache().getClampToEdge(com.mojang.blaze3d.textures.FilterMode.NEAREST));
+            // Viewports are described from the top of the window; the GPU wants them from the bottom.
+            pass.setViewport(v.x(), main.height - v.y() - v.height(), v.width(), v.height());
+            pass.draw(0, 3);
+        }
     }
 
     public static void tickSecondaries(Minecraft mc) {

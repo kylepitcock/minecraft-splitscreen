@@ -65,8 +65,8 @@ public abstract class WindowMixin {
     }
 
     @Inject(method = "getGuiScale", at = @At("HEAD"), cancellable = true)
-    private void splitscreen$guiScale(CallbackInfoReturnable<Double> cir) {
+    private void splitscreen$guiScale(CallbackInfoReturnable<Integer> cir) {
         Viewport v = SplitscreenManager.scopedViewport();
-        if (v != null) cir.setReturnValue((double) v.guiScale());
+        if (v != null) cir.setReturnValue(v.guiScale());
     }
 }
