@@ -20,7 +20,7 @@ process, up to four players, each with their own view, HUD, inventory screens an
      test player that walks, looks around, jumps and swings by itself. **F10** removes the last player.
 3. Hold **Back** for about two seconds to leave, or run `/splitscreen leave`.
 
-The main player keeps using keyboard and mouse (or Legacy4J's controller, see below).
+The main player keeps using keyboard and mouse (or Legacy4J's controller, see below). Extra players use a controller.
 
 ### Layouts
 
@@ -29,24 +29,6 @@ The main player keeps using keyboard and mouse (or Legacy4J's controller, see be
 | 2 | top / bottom (or side by side, `/splitscreen layout vertical`) |
 | 3 | one wide view on top, two below |
 | 4 | quadrants |
-
-### Secondary player controls
-
-| Input | Action |
-| --- | --- |
-| Left stick / L3 | Move / sprint |
-| Right stick / R3 | Look / toggle sneak |
-| A | Jump (click while a screen is open) |
-| RT / LT | Attack-break / use-place |
-| LB / RB | Previous / next hotbar slot |
-| Y | Inventory (shift-click in a screen) |
-| X | Swap hands (right-click in a screen) |
-| B | Drop item (back out of a screen) |
-| D-pad up | Toggle perspective |
-| Start | Open your own pause menu (skin, options); doesn't pause anyone else |
-| Hold Back | Leave splitscreen |
-
-With a screen open, the left stick moves a virtual cursor and the right stick scrolls.
 
 ## Legacy4J
 
