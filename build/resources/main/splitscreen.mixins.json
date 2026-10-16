@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.kylepitcock.splitscreen.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "ClientCommonPacketListenerImplMixin",
+    "GameRendererAccessor",
+    "GuiDebugMixin",
+    "IntegratedServerMixin",
+    "KeyMappingAccessor",
+    "MinecraftAccessor",
+    "MinecraftMixin",
+    "MouseHandlerMixin",
+    "PacketUtilsMixin",
+    "ParticleEngineAccessor",
+    "ScreenMixin",
+    "WindowMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

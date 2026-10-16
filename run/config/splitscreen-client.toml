@@ -1,0 +1,18 @@
+#Maximum number of local players, including the main player.
+# Default: 4
+# Range: 2 ~ 4
+maxPlayers = 4
+#With two players: true = side by side, false = top/bottom (console default).
+verticalSplit = false
+#Let an unassigned controller join by pressing Start while in a singleplayer world.
+joinWithStart = true
+#Camera turn speed for secondary players at full stick deflection, in degrees per second.
+# Default: 160.0
+# Range: 30.0 ~ 720.0
+lookSpeed = 160.0
+#Analog stick dead zone for secondary players.
+# Default: 0.2
+# Range: 0.0 ~ 0.9
+deadzone = 0.2
+#Invert the look axis for secondary players.
+invertLookY = false
