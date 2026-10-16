@@ -10,6 +10,12 @@ group = mod_group_id
 
 repositories {
     mavenLocal()
+    // Legacy4J (hard dependency) and its Factory API library are published to Modrinth's maven.
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
 }
 
 base {
@@ -35,6 +41,13 @@ neoForge {
     runs {
         client {
             client()
+
+            // ./gradlew runClient -Pautotest=3 : jump straight into a world and add scripted test players.
+            if (project.hasProperty('autotest')) {
+                programArguments.addAll '--quickPlaySingleplayer', 'New World'
+                systemProperty 'splitscreen.autotest', project.property('autotest')
+                systemProperty 'splitscreen.debugScale', 'true'
+            }
 
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
@@ -96,6 +109,9 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 
 dependencies {
+    // Hard dependency: Legacy4J (plus the Factory API library it requires).
+    implementation "maven.modrinth:legacy4j:${legacy4j_version}"
+    implementation "maven.modrinth:factory-api:${factoryapi_version}"
     // Example mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
@@ -131,7 +147,8 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
                              mod_license            : mod_license,
                              mod_version            : mod_version,
                              mod_authors            : mod_authors,
-                             mod_description        : mod_description]
+                             mod_description        : mod_description,
+                             legacy4j_version_range : legacy4j_version_range]
     inputs.properties replaceProperties
     expand replaceProperties
     from "src/main/templates"

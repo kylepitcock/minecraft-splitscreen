@@ -22,3 +22,5 @@ forgeclientdev
 20240808.144430
 
 # User Supplied Program Arguments
+--quickPlaySingleplayer
+"New World"
