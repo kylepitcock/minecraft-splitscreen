@@ -32,6 +32,19 @@ public abstract class MinecraftMixin {
         }
     }
 
+    /**
+     * Screens the main player opens from keyboard handling (Esc, the inventory key, ...) are created outside any
+     * player's scope, so they would be laid out for the whole window. Re-run the call inside the main player's
+     * scope so the screen is built for their own view, like screens opened from mouse clicks already are.
+     */
+    @Inject(method = "setScreen", at = @At("HEAD"), cancellable = true)
+    private void splitscreen$openInMainScope(net.minecraft.client.gui.screens.Screen screen, CallbackInfo ci) {
+        if (SplitscreenManager.shouldScopeMainInput()) {
+            ci.cancel();
+            SplitscreenManager.runMain(() -> ((Minecraft) (Object) this).setScreen(screen));
+        }
+    }
+
     @Inject(method = "tick", at = @At("TAIL"))
     private void splitscreen$tick(CallbackInfo ci) {
         SplitscreenManager.tickSecondaries((Minecraft) (Object) this);
