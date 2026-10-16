@@ -7,14 +7,10 @@ process, up to four players, each with their own view, HUD, inventory screens an
 - A Minecraft 26.1.2 port lives on the `mc-26.1.2` branch
 - **Requires [Legacy4J](https://modrinth.com/mod/legacy4j)** (1.8+, which in turn needs Factory API)
 
-> **Status: experimental.** The mod loads and all of its mixins apply in a real client, but the
-> multi-player paths (joining, rendering several views, controller input) have not yet been
-> play-tested with real controllers. Expect rough edges and please report them.
-
 ## Usage
 
 1. Open a **singleplayer** world (the integrated server is what extra players join).
-2. Plug in a controller and press **Start** on it. It joins as the next player.
+2. Plug in a controller and press any button on it. A **Press START to join game** prompt appears; press **Start** to join as the next player.
    - or run `/splitscreen join` (uses the next free controller).
    - **No controller?** Press **F9** (rebindable) or run `/splitscreen join dummy` to add a scripted
      test player that walks, looks around, jumps and swings by itself. **F10** removes the last player.

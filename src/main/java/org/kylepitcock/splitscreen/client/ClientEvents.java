@@ -20,11 +20,9 @@ import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.kylepitcock.splitscreen.Splitscreen;
 import org.kylepitcock.splitscreen.SplitscreenConfig;
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.glfw.GLFWGamepadState;
 
 @EventBusSubscriber(modid = Splitscreen.MODID, value = Dist.CLIENT)
 public final class ClientEvents {
-    private static final boolean[] START_BEFORE = new boolean[GLFW.GLFW_JOYSTICK_LAST + 1];
 
     public static final KeyMapping ADD_TEST_PLAYER = new KeyMapping("key.splitscreen.add_test_player",
             InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_F9, "key.categories.splitscreen");
@@ -45,9 +43,33 @@ public final class ClientEvents {
         }
 
         @SubscribeEvent
+        public static void onGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
+            event.registerAboveAll(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Splitscreen.MODID, "join_prompt"),
+                    ClientEvents::renderJoinPrompt);
+        }
+
+        @SubscribeEvent
         public static void onReloadListeners(RegisterClientReloadListenersEvent event) {
             event.registerReloadListener((ResourceManagerReloadListener) rm -> SplitscreenManager.reloadRenderers(Minecraft.getInstance()));
         }
+    }
+
+    /** "Press START to join game", drawn over the main player's view while a free controller has been touched. */
+    private static void renderJoinPrompt(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+        if (!JoinPrompt.visible() || SplitscreenManager.inSecondaryScope()) return;
+        Minecraft mc = Minecraft.getInstance();
+        var font = mc.font;
+        Component title = Component.translatable("splitscreen.press_start");
+        String pad = JoinPrompt.controllerName();
+        int width = Math.max(font.width(title), pad.isEmpty() ? 0 : font.width(pad)) + 28;
+        int height = pad.isEmpty() ? 28 : 40;
+        int x = (g.guiWidth() - width) / 2;
+        // Lower-middle of the view, clear of the hotbar and control hints.
+        int y = (int) (g.guiHeight() * 0.62) - height / 2;
+        g.fill(x, y, x + width, y + height, 0xC0101010);
+        g.renderOutline(x, y, width, height, 0xFFE0E0E0);
+        g.drawCenteredString(font, title, g.guiWidth() / 2, y + 10, 0xFFFFFFFF);
+        if (!pad.isEmpty()) g.drawCenteredString(font, pad, g.guiWidth() / 2, y + 24, 0xFFA0A0A0);
     }
 
     /** Press Start on a free controller to join, like starting a second player on a console. */
@@ -58,28 +80,10 @@ public final class ClientEvents {
         while (ADD_TEST_PLAYER.consumeClick()) addTestPlayer(mc);
         while (REMOVE_TEST_PLAYER.consumeClick()) removeLastPlayer();
         if (AUTOTEST > 0) autotest(mc);
-        if (!SplitscreenConfig.JOIN_WITH_START.get() || mc.screen != null) {
-            java.util.Arrays.fill(START_BEFORE, false);
-            return;
-        }
-        int reserved = Legacy4JCompat.mainPlayerJid();
-        GLFWGamepadState state = GLFWGamepadState.calloc();
-        try {
-            for (int jid = 0; jid <= GLFW.GLFW_JOYSTICK_LAST; jid++) {
-                boolean pressed = false;
-                if (jid != reserved && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid) && GLFW.glfwGetGamepadState(jid, state)) {
-                    pressed = state.buttons(GLFW.GLFW_GAMEPAD_BUTTON_START) == GLFW.GLFW_PRESS;
-                }
-                boolean edge = pressed && !START_BEFORE[jid];
-                START_BEFORE[jid] = pressed;
-                if (edge) {
-                    String err = SplitscreenManager.join(mc, new Gamepad(jid));
-                    if (err != null && mc.player != null) mc.player.displayClientMessage(Component.translatable(err), false);
-                    break;
-                }
-            }
-        } finally {
-            state.free();
+        int joinJid = JoinPrompt.poll(mc);
+        if (joinJid >= 0) {
+            String err = SplitscreenManager.join(mc, new Gamepad(joinJid));
+            if (err != null && mc.player != null) mc.player.displayClientMessage(Component.translatable(err), false);
         }
     }
 
@@ -110,6 +114,7 @@ public final class ClientEvents {
             Splitscreen.LOGGER.info(sb.toString());
         }
         if (autotestTicks == 100 + 100 * (AUTOTEST + 1)) {
+            JoinPrompt.showForTest();
             var ps = SplitscreenManager.players();
             if (ps.size() >= 3) {
                 SplitscreenManager.run(ps.get(1), () -> mc.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(mc.player)));
