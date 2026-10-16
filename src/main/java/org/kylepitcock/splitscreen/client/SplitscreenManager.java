@@ -6,6 +6,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.Util;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.server.IntegratedServer;
@@ -44,7 +45,6 @@ public final class SplitscreenManager {
     private static int layoutW;
     private static int layoutH;
     private static long lastFrameNanos;
-    private static boolean pauseRequested;
     private static final boolean DEBUG_SCALE = Boolean.getBoolean("splitscreen.debugScale");
     private static int debugFrames;
 
@@ -211,7 +211,8 @@ public final class SplitscreenManager {
         CONTEXTS.add(ctx);
         CONTEXTS.sort((a, b) -> Integer.compare(a.slot(), b.slot()));
         relayout(mc, true);
-        run(ctx, () -> ctx.initRenderers(mc));
+        Gui mainGui = primary.gui;
+        run(ctx, () -> ctx.initRenderers(mc, mainGui));
         ctx.connect(mc, server);
         Splitscreen.LOGGER.info("{} joining splitscreen on {}", ctx.name(), pad.name());
         return null;
@@ -224,10 +225,6 @@ public final class SplitscreenManager {
 
     public static void requestLeave(PlayerContext ctx) {
         if (!ctx.isPrimary() && !PENDING_REMOVAL.contains(ctx)) PENDING_REMOVAL.add(ctx);
-    }
-
-    public static void requestPause() {
-        pauseRequested = true;
     }
 
     public static void connectionLost(PlayerContext ctx, Component reason) {
@@ -374,10 +371,6 @@ public final class SplitscreenManager {
             for (PlayerContext c : gone) removeNow(mc, c);
             if (!isActive()) return;
         }
-        if (pauseRequested) {
-            pauseRequested = false;
-            if (mc.screen == null) mc.pauseGame(false);
-        }
         if (mc.isPaused()) return;
 
         for (PlayerContext ctx : List.copyOf(CONTEXTS)) {
@@ -391,8 +384,9 @@ public final class SplitscreenManager {
 
     /** Called when resource packs reload so the extra renderers pick up new shaders/textures. */
     public static void reloadRenderers(Minecraft mc) {
+        Gui mainGui = primary == null ? null : primary.gui;
         for (PlayerContext ctx : List.copyOf(CONTEXTS)) {
-            if (!ctx.isPrimary()) run(ctx, () -> ctx.reloadRenderers(mc));
+            if (!ctx.isPrimary()) run(ctx, () -> ctx.reloadRenderers(mc, mainGui));
         }
     }
 }

@@ -42,7 +42,7 @@ The main player keeps using keyboard and mouse (or Legacy4J's controller, see be
 | X | Swap hands (right-click in a screen) |
 | B | Drop item (back out of a screen) |
 | D-pad up | Toggle perspective |
-| Start | Pause the game |
+| Start | Open your own pause menu (skin, options); doesn't pause anyone else |
 | Hold Back | Leave splitscreen |
 
 With a screen open, the left stick moves a virtual cursor and the right stick scrolls.
@@ -53,8 +53,9 @@ Legacy4J is a required dependency.
 
 Legacy4J drives the main player from one selected controller. This mod asks Legacy4J which controller
 that is (via reflection, since its class names change between releases) and never offers it to a secondary
-player. Every other controller is free to join. Legacy4J's HUD, screens and options are
-rendered per player through the normal vanilla paths.
+player. Every other controller is free to join. Legacy4J styles the HUD through Factory API
+"UI definitions" stored on each `Gui`, so this mod copies the main player's definitions onto every extra player's
+`Gui`. Each view keeps at least 640x360 GUI units, which is the size Legacy4J's screens are laid out for.
 
 If Legacy4J uses its SDL controller backend, its controller index is assumed to match the GLFW joystick
 index. If that is wrong for your setup, use `/splitscreen join` after unplugging the extra controllers
@@ -84,7 +85,7 @@ Mixins live in `org.kylepitcock.splitscreen.mixin.client`; the logic is in `...s
 - Chat and text input are main-player only (no on-screen keyboard).
 - Each extra player has their own chunk renderer, so memory use and load grow with player count.
   Lower render distance if frame rate suffers.
-- Pausing from any player pauses the whole game.
+- Only the main player's pause menu pauses the game; other players' pause menus are per-player.
 
 ## Config
 

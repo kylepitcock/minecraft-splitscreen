@@ -7,7 +7,6 @@
   "client": [
     "ClientCommonPacketListenerImplMixin",
     "GameRendererAccessor",
-    "GuiDebugMixin",
     "IntegratedServerMixin",
     "KeyMappingAccessor",
     "MinecraftAccessor",

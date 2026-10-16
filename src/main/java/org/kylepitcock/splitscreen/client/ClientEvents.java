@@ -109,6 +109,13 @@ public final class ClientEvents {
             }
             Splitscreen.LOGGER.info(sb.toString());
         }
+        if (autotestTicks == 100 + 100 * (AUTOTEST + 1)) {
+            var ps = SplitscreenManager.players();
+            if (ps.size() >= 3) {
+                SplitscreenManager.run(ps.get(1), () -> mc.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(mc.player)));
+                SplitscreenManager.run(ps.get(2), () -> mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true)));
+            }
+        }
         if (autotestTicks == 100 + 100 * (AUTOTEST + 2)) {
             net.minecraft.client.Screenshot.grab(mc.gameDirectory, "autotest.png", mc.getMainRenderTarget(), m -> {});
         }

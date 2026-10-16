@@ -20,6 +20,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
@@ -66,6 +67,7 @@ public final class PlayerContext {
     HitResult hitResult;
     Screen screen;
     Gui gui;
+    RenderBuffers renderBuffers;
     LevelRenderer levelRenderer;
     GameRenderer gameRenderer;
     int missTime;
@@ -101,9 +103,12 @@ public final class PlayerContext {
     static PlayerContext createSecondary(Minecraft mc, int slot, Gamepad pad) {
         PlayerContext ctx = new PlayerContext(false, slot, "Player" + (slot + 1), pad);
         ctx.gui = new Gui(mc);
-        ctx.levelRenderer = new LevelRenderer(mc, mc.getEntityRenderDispatcher(), mc.getBlockEntityRenderDispatcher(), mc.renderBuffers());
+        // Each view needs its own buffers: chunk compilers from different LevelRenderers would otherwise
+        // fight over one shared buffer pool (and crash with a null acquire / corrupted mesh data).
+        ctx.renderBuffers = new RenderBuffers(2);
+        ctx.levelRenderer = new LevelRenderer(mc, mc.getEntityRenderDispatcher(), mc.getBlockEntityRenderDispatcher(), ctx.renderBuffers);
         ctx.gameRenderer = new GameRenderer(mc, new ItemInHandRenderer(mc, mc.getEntityRenderDispatcher(), mc.getItemRenderer()),
-                mc.getResourceManager(), mc.renderBuffers());
+                mc.getResourceManager(), ctx.renderBuffers);
         ParticleEngineAccessor engine = (ParticleEngineAccessor) mc.particleEngine;
         TreeMap<ParticleRenderType, Queue<Particle>> shared = (TreeMap<ParticleRenderType, Queue<Particle>>) engine.splitscreen$getParticles();
         ctx.particles = new TreeMap<>(shared.comparator());
@@ -219,14 +224,16 @@ public final class PlayerContext {
     }
 
     /** Secondary only; inside scope. */
-    void initRenderers(Minecraft mc) {
+    void initRenderers(Minecraft mc, Gui mainGui) {
+        FactoryUiSync.sync(mainGui, gui);
         levelRenderer.onResourceManagerReload(mc.getResourceManager());
         levelRenderer.resize(viewport.width(), viewport.height());
     }
 
     /** Inside scope. */
-    void reloadRenderers(Minecraft mc) {
+    void reloadRenderers(Minecraft mc, Gui mainGui) {
         if (!primary) {
+            FactoryUiSync.sync(mainGui, gui);
             levelRenderer.onResourceManagerReload(mc.getResourceManager());
             levelRenderer.resize(viewport.width(), viewport.height());
         }
@@ -267,7 +274,12 @@ public final class PlayerContext {
             ((org.kylepitcock.splitscreen.mixin.client.GameRendererAccessor) gameRenderer).splitscreen$getShaders().clear();
             gameRenderer.close();
         }
-        if (levelRenderer != null) levelRenderer.close();
+        if (levelRenderer != null) {
+            // Releases chunk buffers and stops the section compiler threads; close() alone does neither.
+            levelRenderer.setLevel(null);
+            levelRenderer.close();
+        }
+        if (renderBuffers != null) renderBuffers.fixedBufferPack().close();
         if (target != null) target.destroyBuffers();
         if (pad != null) pad.close();
         player = null;
@@ -412,8 +424,10 @@ public final class PlayerContext {
             backHeldTicks = 0;
         }
         if (!pad.isConnected()) SplitscreenManager.requestLeave(this);
-        // Start pauses the whole game, like a console.
-        if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_START)) SplitscreenManager.requestPause();
+        // Start opens this player's own pause menu (skin, options, ...) without pausing anyone else.
+        if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_START) && mc.screen == null) {
+            mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));
+        }
     }
 
     private void applyVirtualKeys(Minecraft mc) {

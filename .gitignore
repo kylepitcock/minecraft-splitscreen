@@ -1,0 +1,12 @@
+# Gradle / build output
+.gradle/
+build/
+.idea/
+*.iml
+
+# Dev client runtime data (worlds, logs, crash reports, screenshots)
+run/
+run-data/
+
+hs_err_pid*.log
+repo/

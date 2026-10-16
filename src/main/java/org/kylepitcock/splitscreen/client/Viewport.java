@@ -13,10 +13,13 @@ public record Viewport(int x, int y, int width, int height, int guiScale, int gu
         return new Viewport(x, y, width, height, scale, gw, gh);
     }
 
-    /** Same idea as Window#calculateScale, with a smaller minimum GUI size so half-screen views stay readable. */
+    /**
+     * Same idea as Window#calculateScale, but each view must keep at least 640x360 GUI units. Legacy4J's
+     * screens and HUD are laid out for that size, so anything smaller clips inventories and crowds the HUD.
+     */
     static int scaleFor(int w, int h, int optionScale, boolean forceUnicode) {
         int i = 1;
-        while (i != optionScale && i < w && i < h && w / (i + 1) >= 320 && h / (i + 1) >= 180) {
+        while (i != optionScale && i < w && i < h && w / (i + 1) >= 640 && h / (i + 1) >= 360) {
             i++;
         }
         if (forceUnicode && i % 2 != 0) {
