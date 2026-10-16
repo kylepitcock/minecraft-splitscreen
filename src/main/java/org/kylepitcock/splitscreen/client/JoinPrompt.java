@@ -17,11 +17,17 @@ public final class JoinPrompt {
     private static int promptJid = -1;
     private static long lastActivityMs;
     private static boolean forcedForTest;
+    private static int lastPlayerCount = -1;
 
     private JoinPrompt() {}
 
     public static boolean visible() {
-        return forcedForTest || (promptJid >= 0 && System.currentTimeMillis() - lastActivityMs < VISIBLE_MS);
+        if (forcedForTest) return true;
+        if (promptJid < 0 || System.currentTimeMillis() - lastActivityMs >= VISIBLE_MS) return false;
+        for (PlayerContext c : SplitscreenManager.players()) {
+            if (c.pad() != null && c.pad().jid() == promptJid) return false;
+        }
+        return true;
     }
 
     /** Name of the controller the prompt is about, for display. */
@@ -48,6 +54,12 @@ public final class JoinPrompt {
      * joystick id when Start is pressed on it, otherwise -1. Must run on the main thread, once per client tick.
      */
     public static int poll(Minecraft mc) {
+        // Someone joined or left: whatever prompt was showing is now stale, so drop it at once.
+        int count = SplitscreenManager.playerCount();
+        if (count != lastPlayerCount) {
+            lastPlayerCount = count;
+            reset();
+        }
         if (!SplitscreenConfig.JOIN_WITH_START.get() || mc.screen != null
                 || SplitscreenManager.playerCount() >= SplitscreenConfig.MAX_PLAYERS.get()) {
             reset();
@@ -77,7 +89,9 @@ public final class JoinPrompt {
             state.free();
         }
         if (joinJid >= 0) {
+            // Hide the prompt right away; the new player's controller stops counting as "free" from here on.
             promptJid = -1;
+            lastActivityMs = 0;
         }
         return joinJid;
     }
@@ -94,8 +108,8 @@ public final class JoinPrompt {
         for (int a = GLFW.GLFW_GAMEPAD_AXIS_LEFT_X; a <= GLFW.GLFW_GAMEPAD_AXIS_RIGHT_Y; a++) {
             if (Math.abs(state.axes(a)) > STICK_THRESHOLD) return true;
         }
-        // Triggers rest at -1 and go to +1 when pulled.
-        return state.axes(GLFW.GLFW_GAMEPAD_AXIS_LEFT_TRIGGER) > 0f || state.axes(GLFW.GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0f;
+        // Triggers rest at -1 and go to +1 when pulled; ignore the small readings some pads report at rest.
+        return state.axes(GLFW.GLFW_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.5f || state.axes(GLFW.GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.5f;
     }
 
     private static boolean isAssigned(int jid) {
