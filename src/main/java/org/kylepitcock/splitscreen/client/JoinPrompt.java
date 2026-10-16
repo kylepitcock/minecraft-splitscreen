@@ -44,6 +44,10 @@ public final class JoinPrompt {
         forcedForTest = true;
     }
 
+    public static void clearTest() {
+        forcedForTest = false;
+    }
+
     public static void reset() {
         promptJid = -1;
         java.util.Arrays.fill(START_BEFORE, false);

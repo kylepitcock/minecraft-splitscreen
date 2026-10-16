@@ -21,7 +21,6 @@ import net.minecraft.client.particle.ParticleGroup;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.TrackingEmitter;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.CloudRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -39,6 +38,7 @@ import net.neoforged.neoforge.event.EventHooks;
 import org.kylepitcock.splitscreen.Splitscreen;
 import org.kylepitcock.splitscreen.SplitscreenConfig;
 import org.kylepitcock.splitscreen.mixin.client.KeyMappingAccessor;
+import org.kylepitcock.splitscreen.mixin.client.CloudRendererAccessor;
 import org.kylepitcock.splitscreen.mixin.client.LevelRendererAccessor;
 import org.kylepitcock.splitscreen.mixin.client.MinecraftAccessor;
 import org.kylepitcock.splitscreen.mixin.client.ParticleEngineAccessor;
@@ -77,7 +77,6 @@ public final class PlayerContext {
     RenderBuffers renderBuffers;
     LevelRenderer levelRenderer;
     GameRenderer gameRenderer;
-    private CloudRenderer ownCloudRenderer;
     int missTime;
     int rightClickDelay;
     private ClientLevel particleLevel;
@@ -121,12 +120,6 @@ public final class PlayerContext {
                 ctx.renderBuffers, mc.getModelManager());
         ctx.levelRenderer = new LevelRenderer(mc, mc.getEntityRenderDispatcher(), mc.getBlockEntityRenderDispatcher(),
                 ctx.renderBuffers, ctx.gameRenderer.getGameRenderState(), ctx.gameRenderer.getFeatureRenderDispatcher());
-        // The cloud renderer loads its texture through a resource reload listener that only the main
-        // LevelRenderer is registered with, so extra views share the main one.
-        LevelRendererAccessor clouds = (LevelRendererAccessor) ctx.levelRenderer;
-        ctx.ownCloudRenderer = clouds.splitscreen$getCloudRenderer();
-        clouds.splitscreen$setCloudRenderer(((LevelRendererAccessor) mc.levelRenderer).splitscreen$getCloudRenderer());
-
         ParticleEngineAccessor engine = (ParticleEngineAccessor) mc.particleEngine;
         ctx.particles = new IdentityHashMap<>();
         ctx.trackingEmitters = new ArrayDeque<>();
@@ -243,7 +236,19 @@ public final class PlayerContext {
     void initRenderers(Minecraft mc, Gui mainGui) {
         FactoryUiSync.sync(mainGui, gui);
         levelRenderer.onResourceManagerReload(mc.getResourceManager());
+        loadClouds(mc);
         levelRenderer.resize(viewport.width(), viewport.height());
+    }
+
+    /**
+     * Each view needs its own cloud renderer: it caches a mesh and position for one camera, so sharing one between
+     * views makes the clouds rebuild and jitter every frame. It is normally loaded by a resource reload listener
+     * that only the main LevelRenderer's instance is registered with, so load this one by hand.
+     */
+    private void loadClouds(Minecraft mc) {
+        CloudRendererAccessor clouds = (CloudRendererAccessor) ((LevelRendererAccessor) levelRenderer).splitscreen$getCloudRenderer();
+        var profiler = net.minecraft.util.profiling.Profiler.get();
+        clouds.splitscreen$apply(clouds.splitscreen$prepare(mc.getResourceManager(), profiler), mc.getResourceManager(), profiler);
     }
 
     /** Inside scope. */
@@ -251,6 +256,7 @@ public final class PlayerContext {
         if (!primary) {
             FactoryUiSync.sync(mainGui, gui);
             levelRenderer.onResourceManagerReload(mc.getResourceManager());
+            loadClouds(mc);
             levelRenderer.resize(viewport.width(), viewport.height());
         }
     }
@@ -288,8 +294,6 @@ public final class PlayerContext {
         if (levelRenderer != null) {
             // Releases chunk buffers and stops the section compiler threads; close() alone does neither.
             levelRenderer.setLevel(null);
-            // Put the cloud renderer we replaced back so close() doesn't free the shared one.
-            if (ownCloudRenderer != null) ((LevelRendererAccessor) levelRenderer).splitscreen$setCloudRenderer(ownCloudRenderer);
             levelRenderer.close();
         }
         if (renderBuffers != null) renderBuffers.fixedBufferPack().close();

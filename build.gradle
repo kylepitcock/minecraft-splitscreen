@@ -38,6 +38,14 @@ neoForge {
         client {
             client()
 
+            // ./gradlew runClient -Pshowcase : scripted tour of the layouts that saves screenshots (run-autotest/screenshots).
+            if (project.hasProperty('showcase')) {
+                gameDirectory = file('run-autotest')
+                programArguments.addAll '--width', '1280', '--height', '720'
+                systemProperty 'splitscreen.showcase', 'true'
+                if (project.hasProperty('showcaseKey')) systemProperty 'splitscreen.showcaseKey', project.property('showcaseKey')
+            }
+
             // ./gradlew runClient -Pautotest=3 : jump straight into a world and add scripted test players.
             if (project.hasProperty('autotest')) {
                 gameDirectory = file('run-autotest')

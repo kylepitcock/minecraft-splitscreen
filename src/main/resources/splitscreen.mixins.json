@@ -6,6 +6,7 @@
   "mixins": [],
   "client": [
     "ClientCommonPacketListenerImplMixin",
+    "CloudRendererAccessor",
     "IntegratedServerMixin",
     "KeyMappingAccessor",
     "LevelRendererAccessor",

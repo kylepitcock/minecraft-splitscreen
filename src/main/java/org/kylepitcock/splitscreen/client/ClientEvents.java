@@ -76,11 +76,12 @@ public final class ClientEvents {
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (AUTOTEST > 0 && mc.level == null) createAutotestWorld(mc);
+        if ((AUTOTEST > 0 || Showcase.ENABLED) && mc.level == null) createAutotestWorld(mc);
         if (mc.level == null || mc.getSingleplayerServer() == null || SplitscreenManager.inSecondaryScope()) return;
         while (ADD_TEST_PLAYER.consumeClick()) addTestPlayer(mc);
         while (REMOVE_TEST_PLAYER.consumeClick()) removeLastPlayer();
-        if (AUTOTEST > 0) autotest(mc);
+        if (Showcase.ENABLED) Showcase.tick(mc);
+        else if (AUTOTEST > 0) autotest(mc);
         int joinJid = JoinPrompt.poll(mc);
         if (joinJid >= 0) {
             String err = SplitscreenManager.join(mc, new Gamepad(joinJid));
