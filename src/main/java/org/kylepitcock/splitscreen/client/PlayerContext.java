@@ -6,41 +6,49 @@ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.screens.InBedChatScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.LevelLoadTracker;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
-import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
-import net.minecraft.core.particles.ParticleGroup;
+import net.minecraft.client.particle.ParticleGroup;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.TrackingEmitter;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.CloudRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.particles.ParticleLimit;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundClientTickEndPacket;
 import net.minecraft.network.protocol.login.ServerboundHelloPacket;
-import net.minecraft.core.UUIDUtil;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.HitResult;
 import net.neoforged.neoforge.event.EventHooks;
 import org.kylepitcock.splitscreen.Splitscreen;
 import org.kylepitcock.splitscreen.SplitscreenConfig;
 import org.kylepitcock.splitscreen.mixin.client.KeyMappingAccessor;
+import org.kylepitcock.splitscreen.mixin.client.LevelRendererAccessor;
 import org.kylepitcock.splitscreen.mixin.client.MinecraftAccessor;
 import org.kylepitcock.splitscreen.mixin.client.ParticleEngineAccessor;
 import org.lwjgl.glfw.GLFW;
 
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Queue;
-import java.util.TreeMap;
 
 /**
  * Everything that belongs to one local player: the connection to the integrated server, the client
@@ -62,7 +70,6 @@ public final class PlayerContext {
     LocalPlayer player;
     ClientLevel level;
     MultiPlayerGameMode gameMode;
-    Entity cameraEntity;
     Entity crosshairPickEntity;
     HitResult hitResult;
     Screen screen;
@@ -70,13 +77,14 @@ public final class PlayerContext {
     RenderBuffers renderBuffers;
     LevelRenderer levelRenderer;
     GameRenderer gameRenderer;
+    private CloudRenderer ownCloudRenderer;
     int missTime;
     int rightClickDelay;
     private ClientLevel particleLevel;
-    private Map<ParticleRenderType, Queue<Particle>> particles;
+    private Map<ParticleRenderType, ParticleGroup<?>> particles;
     private Queue<TrackingEmitter> trackingEmitters;
-    private Queue<Particle> particlesToAdd;
-    private Object2IntOpenHashMap<ParticleGroup> trackedParticleCounts;
+    private Queue<net.minecraft.client.particle.Particle> particlesToAdd;
+    private Object2IntOpenHashMap<ParticleLimit> trackedParticleCounts;
 
     // --- controller state ---
     double cursorX;
@@ -88,6 +96,8 @@ public final class PlayerContext {
     private double scrollAccumulator;
     private int backHeldTicks;
     private boolean closed;
+    private boolean rtPrev;
+    private boolean ltPrev;
 
     private PlayerContext(boolean primary, int slot, String name, Gamepad pad) {
         this.primary = primary;
@@ -104,14 +114,21 @@ public final class PlayerContext {
         PlayerContext ctx = new PlayerContext(false, slot, "Player" + (slot + 1), pad);
         ctx.gui = new Gui(mc);
         // Each view needs its own buffers: chunk compilers from different LevelRenderers would otherwise
-        // fight over one shared buffer pool (and crash with a null acquire / corrupted mesh data).
+        // fight over one shared buffer pool.
         ctx.renderBuffers = new RenderBuffers(2);
-        ctx.levelRenderer = new LevelRenderer(mc, mc.getEntityRenderDispatcher(), mc.getBlockEntityRenderDispatcher(), ctx.renderBuffers);
-        ctx.gameRenderer = new GameRenderer(mc, new ItemInHandRenderer(mc, mc.getEntityRenderDispatcher(), mc.getItemRenderer()),
-                mc.getResourceManager(), ctx.renderBuffers);
+        ctx.gameRenderer = new GameRenderer(mc,
+                new ItemInHandRenderer(mc, mc.getEntityRenderDispatcher(), mc.getItemModelResolver()),
+                ctx.renderBuffers, mc.getModelManager());
+        ctx.levelRenderer = new LevelRenderer(mc, mc.getEntityRenderDispatcher(), mc.getBlockEntityRenderDispatcher(),
+                ctx.renderBuffers, ctx.gameRenderer.getGameRenderState(), ctx.gameRenderer.getFeatureRenderDispatcher());
+        // The cloud renderer loads its texture through a resource reload listener that only the main
+        // LevelRenderer is registered with, so extra views share the main one.
+        LevelRendererAccessor clouds = (LevelRendererAccessor) ctx.levelRenderer;
+        ctx.ownCloudRenderer = clouds.splitscreen$getCloudRenderer();
+        clouds.splitscreen$setCloudRenderer(((LevelRendererAccessor) mc.levelRenderer).splitscreen$getCloudRenderer());
+
         ParticleEngineAccessor engine = (ParticleEngineAccessor) mc.particleEngine;
-        TreeMap<ParticleRenderType, Queue<Particle>> shared = (TreeMap<ParticleRenderType, Queue<Particle>>) engine.splitscreen$getParticles();
-        ctx.particles = new TreeMap<>(shared.comparator());
+        ctx.particles = new IdentityHashMap<>();
         ctx.trackingEmitters = new ArrayDeque<>();
         ctx.particlesToAdd = new ArrayDeque<>();
         ctx.trackedParticleCounts = new Object2IntOpenHashMap<>();
@@ -159,7 +176,6 @@ public final class PlayerContext {
         player = mc.player;
         level = mc.level;
         gameMode = mc.gameMode;
-        cameraEntity = mc.cameraEntity;
         crosshairPickEntity = mc.crosshairPickEntity;
         hitResult = mc.hitResult;
         screen = mc.screen;
@@ -182,7 +198,6 @@ public final class PlayerContext {
         mc.player = player;
         mc.level = level;
         mc.gameMode = gameMode;
-        mc.cameraEntity = cameraEntity;
         mc.crosshairPickEntity = crosshairPickEntity;
         mc.hitResult = hitResult;
         mc.screen = screen;
@@ -204,22 +219,23 @@ public final class PlayerContext {
 
     /** Must run inside this context's scope. */
     void applyViewport(Minecraft mc, Viewport vp) {
-        Viewport old = this.viewport;
         this.viewport = vp;
         if (target == null) {
-            target = new TextureTarget(vp.width(), vp.height(), true, Minecraft.ON_OSX);
-            target.setClearColor(0f, 0f, 0f, 0f);
+            target = new TextureTarget("splitscreen-" + name, vp.width(), vp.height(), true);
         } else if (target.width != vp.width() || target.height != vp.height()) {
-            target.resize(vp.width(), vp.height(), Minecraft.ON_OSX);
+            target.resize(vp.width(), vp.height());
         }
     }
 
     /** Called inside scope, after the viewport is set, to size the renderers and screen. */
     void resizeContents(Minecraft mc) {
         Viewport vp = viewport;
+        var state = mc.gameRenderer.getGameRenderState().windowRenderState;
+        state.width = vp.width();
+        state.height = vp.height();
         mc.gameRenderer.resize(vp.width(), vp.height());
         if (mc.screen != null) {
-            mc.screen.resize(mc, vp.guiWidth(), vp.guiHeight());
+            mc.screen.resize(vp.guiWidth(), vp.guiHeight());
         }
     }
 
@@ -247,7 +263,7 @@ public final class PlayerContext {
         this.connection = conn;
         SplitscreenManager.register(conn, this);
         conn.initiateServerboundPlayConnection(address.toString(), 0,
-                new ClientHandshakePacketListenerImpl(conn, mc, null, null, false, null, s -> {}, null));
+                new ClientHandshakePacketListenerImpl(conn, mc, null, null, false, null, s -> {}, new LevelLoadTracker(), null));
         conn.send(new ServerboundHelloPacket(name, UUIDUtil.createOfflinePlayerUUID(name)));
     }
 
@@ -268,15 +284,12 @@ public final class PlayerContext {
                 Splitscreen.LOGGER.warn("Error closing splitscreen connection for {}", name, e);
             }
         }
-        if (gameRenderer != null) {
-            // Shaders are shared with the main renderer; detach them so close() doesn't free them.
-            gameRenderer.blitShader = null;
-            ((org.kylepitcock.splitscreen.mixin.client.GameRendererAccessor) gameRenderer).splitscreen$getShaders().clear();
-            gameRenderer.close();
-        }
+        if (gameRenderer != null) gameRenderer.close();
         if (levelRenderer != null) {
             // Releases chunk buffers and stops the section compiler threads; close() alone does neither.
             levelRenderer.setLevel(null);
+            // Put the cloud renderer we replaced back so close() doesn't free the shared one.
+            if (ownCloudRenderer != null) ((LevelRendererAccessor) levelRenderer).splitscreen$setCloudRenderer(ownCloudRenderer);
             levelRenderer.close();
         }
         if (renderBuffers != null) renderBuffers.fixedBufferPack().close();
@@ -286,7 +299,6 @@ public final class PlayerContext {
         level = null;
         gameMode = null;
         screen = null;
-        cameraEntity = null;
     }
 
     // ------------------------------------------------------------------ per-frame input (scoped)
@@ -311,6 +323,10 @@ public final class PlayerContext {
         }
     }
 
+    private MouseButtonEvent mouseEvent(int button, int modifiers) {
+        return new MouseButtonEvent(cursorX, cursorY, new MouseButtonInfo(button, modifiers));
+    }
+
     private void screenInput(Minecraft mc, float seconds) {
         Screen s = mc.screen;
         int gw = mc.getWindow().getGuiScaledWidth();
@@ -330,20 +346,19 @@ public final class PlayerContext {
         cursorY = Math.max(0, Math.min(gh - 1, cursorY + ly * Math.abs(ly) * speed));
         if (cursorX != oldX || cursorY != oldY) {
             s.mouseMoved(cursorX, cursorY);
-            if (dragButton >= 0) s.mouseDragged(cursorX, cursorY, dragButton, cursorX - oldX, cursorY - oldY);
+            if (dragButton >= 0) s.mouseDragged(mouseEvent(dragButton, 0), cursorX - oldX, cursorY - oldY);
         }
 
         // A = left click, X = right click, Y = shift + left click, B = back.
         click(mc, s, GLFW.GLFW_GAMEPAD_BUTTON_A, 0);
         if (mc.screen == s) click(mc, s, GLFW.GLFW_GAMEPAD_BUTTON_X, 1);
         if (mc.screen == s && pad.pressedThisFrame(GLFW.GLFW_GAMEPAD_BUTTON_Y)) {
-            virtualShift = true;
-            s.mouseClicked(cursorX, cursorY, 0);
-            s.mouseReleased(cursorX, cursorY, 0);
-            virtualShift = false;
+            MouseButtonEvent shiftClick = mouseEvent(0, GLFW.GLFW_MOD_SHIFT);
+            s.mouseClicked(shiftClick, false);
+            s.mouseReleased(shiftClick);
         }
         if (mc.screen == s && pad.pressedThisFrame(GLFW.GLFW_GAMEPAD_BUTTON_B)) {
-            s.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0);
+            s.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
         }
         if (mc.screen == s) {
             scrollAccumulator += pad.axis(GLFW.GLFW_GAMEPAD_AXIS_RIGHT_Y, dz) * seconds * 12.0;
@@ -357,10 +372,10 @@ public final class PlayerContext {
 
     private void click(Minecraft mc, Screen s, int button, int mouseButton) {
         if (pad.pressedThisFrame(button)) {
-            s.mouseClicked(cursorX, cursorY, mouseButton);
+            s.mouseClicked(mouseEvent(mouseButton, 0), false);
             dragButton = mouseButton;
         } else if (pad.releasedThisFrame(button)) {
-            s.mouseReleased(cursorX, cursorY, mouseButton);
+            s.mouseReleased(mouseEvent(mouseButton, 0));
             if (dragButton == mouseButton) dragButton = -1;
         }
     }
@@ -380,34 +395,35 @@ public final class PlayerContext {
         pad.pollTick();
         applyVirtualKeys(mc);
 
-        if (rightClickDelay > 0) rightClickDelay--;
+        MinecraftAccessor acc = (MinecraftAccessor) mc;
+        if (acc.splitscreen$getRightClickDelay() > 0) acc.splitscreen$setRightClickDelay(acc.splitscreen$getRightClickDelay() - 1);
         mc.gui.tick(false);
-        mc.gameRenderer.pick(1.0F);
+        acc.splitscreen$pick(1.0F);
         gameMode.tick();
 
         if (mc.screen == null) {
             if (player.isDeadOrDying()) {
                 mc.setScreen(null);
             } else if (player.isSleeping()) {
-                mc.setScreen(new InBedChatScreen());
+                mc.gui.getChat().openScreen(ChatComponent.ChatMethod.MESSAGE, InBedChatScreen::new);
             }
         }
         if (mc.screen != null) {
             if (mc.screen instanceof InBedChatScreen bed && !player.isSleeping()) bed.onPlayerWokeUp();
-            ((MinecraftAccessor) mc).splitscreen$setMissTime(10000);
+            acc.splitscreen$setMissTime(10000);
             mc.screen.tick();
         }
         if (mc.screen == null) {
-            ((MinecraftAccessor) mc).splitscreen$handleKeybinds();
-            int miss = ((MinecraftAccessor) mc).splitscreen$getMissTime();
-            if (miss > 0) ((MinecraftAccessor) mc).splitscreen$setMissTime(miss - 1);
+            acc.splitscreen$handleKeybinds();
+            int miss = acc.splitscreen$getMissTime();
+            if (miss > 0) acc.splitscreen$setMissTime(miss - 1);
         }
 
         ClientLevel lvl = mc.level;
         if (lvl != null) {
             mc.gameRenderer.tick();
-            mc.levelRenderer.tick();
             lvl.tickEntities();
+            lvl.tickBlockEntities();
             EventHooks.fireLevelTickPre(lvl, () -> true);
             lvl.tick(() -> true);
             EventHooks.fireLevelTickPost(lvl, () -> true);
@@ -415,6 +431,7 @@ public final class PlayerContext {
                 lvl.animateTick(mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ());
             }
             mc.particleEngine.tick();
+            if (mc.getConnection() != null) mc.getConnection().send(ServerboundClientTickEndPacket.INSTANCE);
         }
 
         // Hold Back to leave splitscreen.
@@ -439,16 +456,17 @@ public final class PlayerContext {
         if (mc.screen != null) {
             // Gameplay buttons are inert while a screen is open.
             sprintLatched = false;
+            input.sprintLatched = false;
             input.sneakToggled = false;
             return;
         }
         if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_RIGHT_THUMB)) input.sneakToggled = !input.sneakToggled;
         if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_LEFT_THUMB)) sprintLatched = true;
-        if (player.input.forwardImpulse <= 0.01f) sprintLatched = false;
-        key(o.keySprint, sprintLatched, 0);
+        if (!input.hasForwardImpulse()) sprintLatched = false;
+        input.sprintLatched = sprintLatched;
 
-        key(o.keyAttack, pad.trigger(GLFW.GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.5f, 0);
-        key(o.keyUse, pad.trigger(GLFW.GLFW_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.5f, 0);
+        key(o.keyAttack, pad.trigger(GLFW.GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.5f);
+        key(o.keyUse, pad.trigger(GLFW.GLFW_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.5f);
         edge(o.keyAttack, rtPressed());
         edge(o.keyUse, ltPressed());
         if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_Y)) click(o.keyInventory);
@@ -457,14 +475,11 @@ public final class PlayerContext {
         if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_DPAD_UP)) click(o.keyTogglePerspective);
 
         var inv = player.getInventory();
-        if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER)) inv.selected = (inv.selected + 1) % 9;
-        if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_LEFT_BUMPER)) inv.selected = (inv.selected + 8) % 9;
+        if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER)) inv.setSelectedSlot((inv.getSelectedSlot() + 1) % 9);
+        if (pad.tickPressed(GLFW.GLFW_GAMEPAD_BUTTON_LEFT_BUMPER)) inv.setSelectedSlot((inv.getSelectedSlot() + 8) % 9);
     }
 
     // Trigger edge tracking so a quick pull still registers one click.
-    private boolean rtPrev;
-    private boolean ltPrev;
-
     private boolean rtPressed() {
         boolean now = pad.trigger(GLFW.GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.5f;
         boolean edge = now && !rtPrev;
@@ -479,7 +494,7 @@ public final class PlayerContext {
         return edge;
     }
 
-    private static void key(KeyMapping key, boolean down, int unused) {
+    private static void key(KeyMapping key, boolean down) {
         ((KeyMappingAccessor) key).splitscreen$setIsDown(down);
     }
 

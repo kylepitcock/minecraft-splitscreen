@@ -4,7 +4,8 @@ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
-import net.minecraft.core.particles.ParticleGroup;
+import net.minecraft.client.particle.ParticleGroup;
+import net.minecraft.core.particles.ParticleLimit;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.TrackingEmitter;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,11 +25,11 @@ public interface ParticleEngineAccessor {
     void splitscreen$setLevel(ClientLevel level);
 
     @Accessor("particles")
-    Map<ParticleRenderType, Queue<Particle>> splitscreen$getParticles();
+    Map<ParticleRenderType, ParticleGroup<?>> splitscreen$getParticles();
 
     @Mutable
     @Accessor("particles")
-    void splitscreen$setParticles(Map<ParticleRenderType, Queue<Particle>> particles);
+    void splitscreen$setParticles(Map<ParticleRenderType, ParticleGroup<?>> particles);
 
     @Accessor("trackingEmitters")
     Queue<TrackingEmitter> splitscreen$getTrackingEmitters();
@@ -45,9 +46,9 @@ public interface ParticleEngineAccessor {
     void splitscreen$setParticlesToAdd(Queue<Particle> queue);
 
     @Accessor("trackedParticleCounts")
-    Object2IntOpenHashMap<ParticleGroup> splitscreen$getTrackedParticleCounts();
+    Object2IntOpenHashMap<ParticleLimit> splitscreen$getTrackedParticleCounts();
 
     @Mutable
     @Accessor("trackedParticleCounts")
-    void splitscreen$setTrackedParticleCounts(Object2IntOpenHashMap<ParticleGroup> counts);
+    void splitscreen$setTrackedParticleCounts(Object2IntOpenHashMap<ParticleLimit> counts);
 }

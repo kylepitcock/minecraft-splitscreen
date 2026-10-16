@@ -14,12 +14,14 @@ public record Viewport(int x, int y, int width, int height, int guiScale, int gu
     }
 
     /**
-     * Same idea as Window#calculateScale, but each view must keep at least 640x360 GUI units. Legacy4J's
-     * screens and HUD are laid out for that size, so anything smaller clips inventories and crowds the HUD.
+     * Same idea as Window#calculateScale, but with a configurable minimum GUI size per view (default 400x225,
+     * far below vanilla's 320x240 only for tiny views). Larger minimums give a smaller, roomier UI.
      */
     static int scaleFor(int w, int h, int optionScale, boolean forceUnicode) {
+        int minW = org.kylepitcock.splitscreen.SplitscreenConfig.MIN_GUI_WIDTH.get();
+        int minH = org.kylepitcock.splitscreen.SplitscreenConfig.MIN_GUI_HEIGHT.get();
         int i = 1;
-        while (i != optionScale && i < w && i < h && w / (i + 1) >= 640 && h / (i + 1) >= 360) {
+        while (i != optionScale && i < w && i < h && w / (i + 1) >= minW && h / (i + 1) >= minH) {
             i++;
         }
         if (forceUnicode && i % 2 != 0) {

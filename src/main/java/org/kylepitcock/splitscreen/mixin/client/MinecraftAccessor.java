@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.RenderBuffers;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -34,6 +35,12 @@ public interface MinecraftAccessor {
 
     @Accessor("rightClickDelay")
     void splitscreen$setRightClickDelay(int value);
+
+    @Accessor("renderBuffers")
+    RenderBuffers splitscreen$getRenderBuffers();
+
+    @Invoker("pick")
+    void splitscreen$pick(float partialTicks);
 
     @Invoker("handleKeybinds")
     void splitscreen$handleKeybinds();

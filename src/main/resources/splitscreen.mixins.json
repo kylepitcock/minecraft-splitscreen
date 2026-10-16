@@ -6,15 +6,14 @@
   "mixins": [],
   "client": [
     "ClientCommonPacketListenerImplMixin",
-    "GameRendererAccessor",
     "IntegratedServerMixin",
     "KeyMappingAccessor",
+    "LevelRendererAccessor",
     "MinecraftAccessor",
     "MinecraftMixin",
     "MouseHandlerMixin",
-    "PacketUtilsMixin",
+    "PacketProcessorMixin",
     "ParticleEngineAccessor",
-    "ScreenMixin",
     "WindowMixin"
   ],
   "injectors": {

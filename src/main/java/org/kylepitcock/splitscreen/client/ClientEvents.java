@@ -2,7 +2,7 @@ package org.kylepitcock.splitscreen.client;
 
 import com.mojang.brigadier.Command;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -12,7 +12,8 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -26,34 +27,35 @@ import org.lwjgl.glfw.GLFWGamepadState;
 public final class ClientEvents {
     private static final boolean[] START_BEFORE = new boolean[GLFW.GLFW_JOYSTICK_LAST + 1];
 
+    public static final KeyMapping.Category CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath(Splitscreen.MODID, "main"));
     public static final KeyMapping ADD_TEST_PLAYER = new KeyMapping("key.splitscreen.add_test_player",
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_F9, "key.categories.splitscreen");
+            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_F9, CATEGORY);
     public static final KeyMapping REMOVE_TEST_PLAYER = new KeyMapping("key.splitscreen.remove_test_player",
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_F10, "key.categories.splitscreen");
+            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_F10, CATEGORY);
 
     private static final int AUTOTEST = Integer.getInteger("splitscreen.autotest", 0);
     private static int autotestTicks;
 
     private ClientEvents() {}
 
-    @EventBusSubscriber(modid = Splitscreen.MODID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
-    public static final class ModBus {
-        @SubscribeEvent
-        public static void onKeys(RegisterKeyMappingsEvent event) {
-            event.register(ADD_TEST_PLAYER);
-            event.register(REMOVE_TEST_PLAYER);
-        }
+    @SubscribeEvent
+    public static void onKeys(RegisterKeyMappingsEvent event) {
+        event.registerCategory(CATEGORY);
+        event.register(ADD_TEST_PLAYER);
+        event.register(REMOVE_TEST_PLAYER);
+    }
 
-        @SubscribeEvent
-        public static void onReloadListeners(RegisterClientReloadListenersEvent event) {
-            event.registerReloadListener((ResourceManagerReloadListener) rm -> SplitscreenManager.reloadRenderers(Minecraft.getInstance()));
-        }
+    @SubscribeEvent
+    public static void onReloadListeners(AddClientReloadListenersEvent event) {
+        event.addListener(Identifier.fromNamespaceAndPath(Splitscreen.MODID, "renderers"),
+                (ResourceManagerReloadListener) rm -> SplitscreenManager.reloadRenderers(Minecraft.getInstance()));
     }
 
     /** Press Start on a free controller to join, like starting a second player on a console. */
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
+        if (AUTOTEST > 0 && mc.level == null) createAutotestWorld(mc);
         if (mc.level == null || mc.getSingleplayerServer() == null || SplitscreenManager.inSecondaryScope()) return;
         while (ADD_TEST_PLAYER.consumeClick()) addTestPlayer(mc);
         while (REMOVE_TEST_PLAYER.consumeClick()) removeLastPlayer();
@@ -74,7 +76,7 @@ public final class ClientEvents {
                 START_BEFORE[jid] = pressed;
                 if (edge) {
                     String err = SplitscreenManager.join(mc, new Gamepad(jid));
-                    if (err != null && mc.player != null) mc.player.displayClientMessage(Component.translatable(err), false);
+                    if (err != null && mc.player != null) mc.player.sendSystemMessage(Component.translatable(err));
                     break;
                 }
             }
@@ -83,10 +85,30 @@ public final class ClientEvents {
         }
     }
 
+    private static boolean autotestWorldRequested;
+    private static int menuTicks;
+
+    /** -Pautotest: build a fresh creative world from the title screen so the test never waits on a prompt. */
+    private static void createAutotestWorld(Minecraft mc) {
+        // Legacy4J swaps in its own main menu, so accept any idle menu screen once loading is done.
+        if (autotestWorldRequested || mc.getOverlay() != null || mc.screen == null || ++menuTicks < 60) return;
+        autotestWorldRequested = true;
+        Splitscreen.LOGGER.info("[autotest] creating world from {}", mc.screen.getClass().getName());
+        var settings = new net.minecraft.world.level.LevelSettings("autotest-" + System.currentTimeMillis() / 1000,
+                net.minecraft.world.level.GameType.CREATIVE,
+                new net.minecraft.world.level.LevelSettings.DifficultySettings(net.minecraft.world.Difficulty.PEACEFUL, false, false),
+                true, net.minecraft.world.level.WorldDataConfiguration.DEFAULT);
+        mc.createWorldOpenFlows().createFreshLevel(settings.levelName(), settings,
+                new net.minecraft.world.level.levelgen.WorldOptions(8675309L, false, false),
+                registries -> registries.lookupOrThrow(net.minecraft.core.registries.Registries.WORLD_PRESET)
+                        .getOrThrow(net.minecraft.world.level.levelgen.presets.WorldPresets.NORMAL).value().createWorldDimensions(),
+                mc.screen);
+    }
+
     /** Adds a scripted player that needs no controller. */
     public static void addTestPlayer(Minecraft mc) {
         String err = SplitscreenManager.join(mc, new Gamepad(-1, true));
-        if (err != null && mc.player != null) mc.player.displayClientMessage(Component.translatable(err), false);
+        if (err != null && mc.player != null) mc.player.sendSystemMessage(Component.translatable(err));
     }
 
     public static void removeLastPlayer() {
@@ -117,7 +139,11 @@ public final class ClientEvents {
             }
         }
         if (autotestTicks == 100 + 100 * (AUTOTEST + 2)) {
-            net.minecraft.client.Screenshot.grab(mc.gameDirectory, "autotest.png", mc.getMainRenderTarget(), m -> {});
+            net.minecraft.client.Screenshot.grab(mc.gameDirectory, "autotest.png", mc.getMainRenderTarget(), 1, m -> {});
+            for (PlayerContext c : SplitscreenManager.players()) {
+                Splitscreen.LOGGER.info("[autotest] {} viewport={} target={}x{}", c.name(), c.viewport(),
+                        c.target() == null ? "none" : c.target().width, c.target() == null ? 0 : c.target().height);
+            }
         }
         if (autotestTicks == 100 + 100 * (AUTOTEST + 3)) {
             Splitscreen.LOGGER.info("[autotest] done, stopping");
@@ -144,16 +170,13 @@ public final class ClientEvents {
     @SubscribeEvent
     public static void onScreenRenderPost(ScreenEvent.Render.Post event) {
         if (!SplitscreenManager.inSecondaryScope()) return;
-        GuiGraphics g = event.getGuiGraphics();
+        GuiGraphicsExtractor g = event.getGuiGraphics();
         int x = (int) SplitscreenManager.virtualCursorX();
         int y = (int) SplitscreenManager.virtualCursorY();
-        g.pose().pushPose();
-        g.pose().translate(0, 0, 400);
         g.fill(x - 4, y - 1, x + 5, y + 2, 0xFF000000);
         g.fill(x - 1, y - 4, x + 2, y + 5, 0xFF000000);
         g.fill(x - 3, y, x + 4, y + 1, 0xFFFFFFFF);
         g.fill(x, y - 3, x + 1, y + 4, 0xFFFFFFFF);
-        g.pose().popPose();
     }
 
     @SubscribeEvent
