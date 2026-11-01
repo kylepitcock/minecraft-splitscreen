@@ -72,12 +72,21 @@ versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
 
-# Legacy4J is required. The dependency is client-side only because this mod does nothing on a server.
+# Legacy4J and Controllable are optional, client-side integrations: they drive the main player's controller, so
+# their pad is kept away from secondary players. Splitscreen works without either.
 [[dependencies."${mod_id}"]]
 modId = "legacy"
-type = "required"
-reason = "Splitscreen shares Legacy4J's controller handling and UI."
+type = "optional"
+reason = "Shares Legacy4J's controller handling and UI."
 versionRange = "${legacy4j_version_range}"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies."${mod_id}"]]
+modId = "controllable"
+type = "optional"
+reason = "Keeps Controllable's active controller for the main player."
+versionRange = "[0.25,)"
 ordering = "AFTER"
 side = "CLIENT"
 

@@ -22,6 +22,8 @@ import org.kylepitcock.splitscreen.Splitscreen;
 import org.kylepitcock.splitscreen.SplitscreenConfig;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.List;
+
 @EventBusSubscriber(modid = Splitscreen.MODID, value = Dist.CLIENT)
 public final class ClientEvents {
 
@@ -94,7 +96,7 @@ public final class ClientEvents {
 
     /** -Pautotest: build a fresh creative world from the title screen so the test never waits on a prompt. */
     private static void createAutotestWorld(Minecraft mc) {
-        // Legacy4J swaps in its own main menu, so accept any idle menu screen once loading is done.
+        // Mods may swap in their own main menu, so accept any idle menu screen once loading is done.
         if (autotestWorldRequested || mc.getOverlay() != null || mc.screen == null || ++menuTicks < 60) return;
         autotestWorldRequested = true;
         Splitscreen.LOGGER.info("[autotest] creating world from {}", mc.screen.getClass().getName());
@@ -213,9 +215,9 @@ public final class ClientEvents {
         if (dummy) {
             pad = new Gamepad(-1, true);
         } else {
-            int reserved = Legacy4JCompat.mainPlayerJid();
+            List<Integer> reserved = ReservedPads.jids();
             for (int jid = 0; jid <= GLFW.GLFW_JOYSTICK_LAST && pad == null; jid++) {
-                if (jid != reserved && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid)) pad = new Gamepad(jid);
+                if (!reserved.contains(jid) && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid)) pad = new Gamepad(jid);
             }
         }
         if (pad == null) {
