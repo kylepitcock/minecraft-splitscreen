@@ -5,6 +5,8 @@ import org.kylepitcock.splitscreen.SplitscreenConfig;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWGamepadState;
 
+import java.util.List;
+
 /**
  * The "Press START to join game" prompt from the console editions: when a controller that isn't playing yet is
  * touched, a prompt appears; pressing Start on it adds that controller as the next local player.
@@ -65,14 +67,14 @@ public final class JoinPrompt {
             reset();
             return -1;
         }
-        int reserved = Legacy4JCompat.mainPlayerJid();
+        List<Integer> reserved = ReservedPads.jids();
         int joinJid = -1;
         GLFWGamepadState state = GLFWGamepadState.calloc();
         try {
             for (int jid = 0; jid <= GLFW.GLFW_JOYSTICK_LAST; jid++) {
                 boolean start = false;
                 boolean active = false;
-                if (jid != reserved && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid) && GLFW.glfwGetGamepadState(jid, state)) {
+                if (!reserved.contains(jid) && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid) && GLFW.glfwGetGamepadState(jid, state)) {
                     start = state.buttons(GLFW.GLFW_GAMEPAD_BUTTON_START) == GLFW.GLFW_PRESS;
                     active = start || anyInput(state);
                 }

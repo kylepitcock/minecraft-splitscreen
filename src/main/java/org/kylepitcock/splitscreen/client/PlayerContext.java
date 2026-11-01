@@ -223,9 +223,14 @@ public final class PlayerContext {
         }
     }
 
+    /** Legacy4J (if present) styles the HUD through definitions stored on the main Gui; copy them to this one. */
+    private void syncLegacyUi(Gui mainGui) {
+        if (Legacy4JCompat.isLoaded()) FactoryUiSync.sync(mainGui, gui);
+    }
+
     /** Secondary only; inside scope. */
     void initRenderers(Minecraft mc, Gui mainGui) {
-        FactoryUiSync.sync(mainGui, gui);
+        syncLegacyUi(mainGui);
         levelRenderer.onResourceManagerReload(mc.getResourceManager());
         levelRenderer.resize(viewport.width(), viewport.height());
     }
@@ -233,7 +238,7 @@ public final class PlayerContext {
     /** Inside scope. */
     void reloadRenderers(Minecraft mc, Gui mainGui) {
         if (!primary) {
-            FactoryUiSync.sync(mainGui, gui);
+            syncLegacyUi(mainGui);
             levelRenderer.onResourceManagerReload(mc.getResourceManager());
             levelRenderer.resize(viewport.width(), viewport.height());
         }

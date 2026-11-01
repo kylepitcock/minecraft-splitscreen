@@ -5,7 +5,7 @@ process, up to four players, each with their own view, HUD, inventory screens an
 
 - Minecraft **1.21.1**, **NeoForge** 21.1.x, client-side only
 - A Minecraft 26.1.2 port lives on the `mc-26.1.2` branch
-- **Requires [Legacy4J](https://modrinth.com/mod/legacy4j)** (1.8+, which in turn needs Factory API)
+- Works with **[Controllable](https://www.curseforge.com/minecraft/mc-mods/controllable)** (0.25+, needs Framework) and/or **[Legacy4J](https://modrinth.com/mod/legacy4j)** (1.8+, needs Factory API) for the main player's controller; both are optional
 
 ## Usage
 
@@ -16,7 +16,7 @@ process, up to four players, each with their own view, HUD, inventory screens an
      test player that walks, looks around, jumps and swings by itself. **F10** removes the last player.
 3. Hold **Back** for about two seconds to leave, or run `/splitscreen leave`.
 
-The main player keeps using keyboard and mouse (or Legacy4J's controller, see below). Extra players use a controller.
+The main player keeps using keyboard and mouse (or Controllable's / Legacy4J's controller, see below). Extra players use a controller.
 
 ### Layouts
 
@@ -26,9 +26,16 @@ The main player keeps using keyboard and mouse (or Legacy4J's controller, see be
 | 3 | one wide view on top, two below |
 | 4 | quadrants |
 
+## Controllable
+
+Optional. Controllable gives the main player controller support. This mod asks it (via reflection) which pad it has
+active and never offers that pad to a secondary player; every other controller is free to join. With Controllable's SDL
+backend the pad is matched to its GLFW joystick by name. `./gradlew runClient` downloads Controllable and Framework
+into `libs/` for dev runs.
+
 ## Legacy4J
 
-Legacy4J is a required dependency.
+Optional.
 
 Legacy4J drives the main player from one selected controller. This mod asks Legacy4J which controller
 that is (via reflection, since its class names change between releases) and never offers it to a secondary

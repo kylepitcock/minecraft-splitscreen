@@ -108,10 +108,33 @@ neoForge {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 
+// Controllable is published on CurseForge and GitHub Packages (needs a login), so dev runs pull the jars from GitHub releases.
+def controllableJars = [
+        layout.projectDirectory.file("libs/controllable-neoforge-${controllable_version}-release.jar").asFile,
+        layout.projectDirectory.file("libs/framework-neoforge-${controllable_framework_version}-signed.jar").asFile]
+def controllableUrls = [
+        "https://github.com/MrCrayfish/Controllable/releases/download/v${controllable_version}/controllable-neoforge-${controllable_version}-release.jar",
+        "https://github.com/MrCrayfish/Framework/releases/download/v${controllable_framework_version}/framework-neoforge-${controllable_framework_version}-signed.jar"]
+tasks.register('fetchControllable') {
+    outputs.files(controllableJars)
+    doLast {
+        controllableJars.eachWithIndex { jar, i ->
+            if (!jar.exists()) {
+                jar.parentFile.mkdirs()
+                jar.withOutputStream { out -> new URL(controllableUrls[i]).withInputStream { out << it } }
+            }
+        }
+    }
+}
+tasks.matching { it.name.startsWith('run') || it.name.startsWith('prepareRun') }.configureEach { dependsOn 'fetchControllable' }
+
 dependencies {
     // Hard dependency: Legacy4J (plus the Factory API library it requires).
     implementation "maven.modrinth:legacy4j:${legacy4j_version}"
     implementation "maven.modrinth:factory-api:${factoryapi_version}"
+    // Optional: Controllable and its Framework library, only so dev runs can try them (see fetchControllable).
+    runtimeOnly files(controllableJars)
+
     // Example mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

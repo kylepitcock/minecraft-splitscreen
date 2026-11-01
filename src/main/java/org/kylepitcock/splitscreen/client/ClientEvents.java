@@ -21,6 +21,8 @@ import org.kylepitcock.splitscreen.Splitscreen;
 import org.kylepitcock.splitscreen.SplitscreenConfig;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.List;
+
 @EventBusSubscriber(modid = Splitscreen.MODID, value = Dist.CLIENT)
 public final class ClientEvents {
 
@@ -190,9 +192,9 @@ public final class ClientEvents {
         if (dummy) {
             pad = new Gamepad(-1, true);
         } else {
-            int reserved = Legacy4JCompat.mainPlayerJid();
+            List<Integer> reserved = ReservedPads.jids();
             for (int jid = 0; jid <= GLFW.GLFW_JOYSTICK_LAST && pad == null; jid++) {
-                if (jid != reserved && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid)) pad = new Gamepad(jid);
+                if (!reserved.contains(jid) && !isAssigned(jid) && GLFW.glfwJoystickIsGamepad(jid)) pad = new Gamepad(jid);
             }
         }
         if (pad == null) {
